@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart Study Planner</title>
+  <style>
+    :root{
+      --bg:#f6f9ff;
+      --card:#ffffff;
+      --accent:#3b82f6;
+      --muted:#6b7280;
+      --success:#10b981;
+    }
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial; background:var(--bg); margin:0; padding:24px; color:#111827;}
+    .container{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:360px 1fr;gap:20px;}
+    .card{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 6px 18px rgba(12,13,20,0.06);}
+    h1{font-size:20px;margin:0 0 10px;}
+    label{display:block;font-size:13px;color:var(--muted);margin-top:12px;}
+    input[type="text"], input[type="number"], textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef8;font-size:14px;box-sizing:border-box}
+    button{background:var(--accent);color:white;padding:10px 14px;border-radius:8px;border:0;font-weight:600;cursor:pointer;margin-top:12px}
+    button.secondary{background:transparent;color:var(--accent);border:1px solid rgba(59,130,246,0.15)}
+    .subject-list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+    .subject-item{display:flex;justify-content:space-between;gap:8px;padding:8px;border-radius:8px;background:#f8fbff;border:1px solid #eef6ff}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .top-row{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .progress-wrap{display:flex;align-items:center;gap:12px}
+    .progress{height:12px;background:#eef2ff;border-radius:999px;width:220px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#60a5fa);width:0%}
+    .days-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:14px}
+    .day-card{padding:12px;border-radius:10px;border:1px solid #eef2ff;background:#fff}
+    .task{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed #f1f5f9}
+    .task:last-child{border-bottom:none}
+    .muted{color:var(--muted);font-size:13px}
+    .actions{display:flex;gap:8px;margin-top:12px}
+    .small{font-size:13px;padding:6px 8px;border-radius:8px}
+    .note{font-size:13px;color:var(--muted);margin-top:8px}
+    @media (max-width:800px){
+      .container{grid-template-columns:1fr; padding:12px}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Left column: add subjects & controls -->
+    <div class="card">
+      <h1>Smart Study Planner</h1>
+      <div class="muted">Add subjects and topics (comma-separated). Example topics: "Ch1, Ch2, Revision".</div>
+
+      <label for="subjectName">Subject name</label>
+      <input id="subjectName" type="text" placeholder="e.g. Mathematics" />
+
+      <label for="topicsInput">Topics (comma-separated)</label>
+      <textarea id="topicsInput" rows="3" placeholder="e.g. Algebra, Calculus, Trigonometry"></textarea>
+
+      <div class="controls">
+        <button id="addSubjectBtn">Add Subject</button>
+        <button id="clearSubjectsBtn" class="secondary">Clear Subjects</button>
+      </div>
+
+      <div class="top-row" style="margin-top:14px">
+        <div>
+          <label for="daysInput">Days until exam</label>
+          <input id="daysInput" type="number" min="1" value="7" />
+        </div>
+        <div style="flex:1">
+          <label>&nbsp;</label>
+          <button id="generatePlan" style="width:100%">Generate Plan</button>
+        </div>
+      </div>
+
+      <div style="margin-top:14px">
+        <div class="muted">Saved subjects</div>
+        <div id="subjectList" class="subject-list"></div>
+      </div>
+
+      <div class="actions">
+        <button id="exportBtn" class="small secondary">Export JSON</button>
+        <button id="importBtn" class="small secondary">Import JSON</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none" />
+      </div>
+
+      <div class="note">Your plan is stored locally in your browser (localStorage). Use export to save a copy.</div>
+    </div>
+
+    <!-- Right column: plan & progress -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h1 style="margin-bottom:6px">Study Plan</h1>
+          <div class="muted" id="summaryText">No plan generated yet.</div>
+        </div>
+        <div class="progress-wrap">
+          <div class="muted" id="progressPct">0%</div>
+          <div class="progress" title="Progress">
+            <i id="progressBar"></i>
+          </div>
+        </div>
+      </div>
+
+      <div id="planArea" style="margin-top:12px">
+        <div class="days-grid" id="daysGrid"></div>
+      </div>
+
+      <div style="margin-top:12px; display:flex;gap:8px;align-items:center">
+        <button id="resetProgress" class="secondary small">Reset Progress</button>
+        <button id="clearAll" class="secondary small">Clear Everything</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Simple Smart Study Planner - client-side only (localStorage)
+  const subjectName = document.getElementById('subjectName');
+  const topicsInput = document.getElementById('topicsInput');
+  const addSubjectBtn = document.getElementById('addSubjectBtn');
+  const subjectListEl = document.getElementById('subjectList');
+  const clearSubjectsBtn = document.getElementById('clearSubjectsBtn');
+  const daysInput = document.getElementById('daysInput');
+  const generatePlanBtn = document.getElementById('generatePlan');
+  const daysGrid = document.getElementById('daysGrid');
+  const summaryText = document.getElementById('summaryText');
+  const progressBar = document.getElementById('progressBar');
+  const progressPct = document.getElementById('progressPct');
+  const resetProgressBtn = document.getElementById('resetProgress');
+  const clearAllBtn = document.getElementById('clearAll');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const importFile = document.getElementById('importFile');
+
+  // Data structures in localStorage
+  // subjects: [{id, name, topics: [..]}]
+  // plan: {days: number, schedule: [{day:1, tasks:[{id,subject,topic,done}]}]}
+  function uid(prefix='id'){return prefix + '_' + Math.random().toString(36).slice(2,9);}
+
+  function save(key, val){localStorage.setItem(key, JSON.stringify(val));}
+  function load(key){try{return JSON.parse(localStorage.getItem(key));}catch(e){return null;}}
+
+  // Initialize
+  let subjects = load('ssp_subjects') || [];
+  let plan = load('ssp_plan') || null;
+
+  function renderSubjects(){
+    subjectListEl.innerHTML = '';
+    if(subjects.length === 0){
+      subjectListEl.innerHTML = '<div class="muted">No subjects yet</div>'; return;
+    }
+    subjects.forEach(s=>{
+      const div = document.createElement('div'); div.className='subject-item';
+      div.innerHTML = `<div style="flex:1">
+        <strong>${escapeHtml(s.name)}</strong><div class="muted" style="font-size:13px">${s.topics.join(', ')}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="small" data-id="${s.id}" onclick="removeSubject(event)">Remove</button>
+      </div>`;
+      subjectListEl.appendChild(div);
+    });
+  }
+
+  window.removeSubject = function(e){
+    const id = e.target.dataset.id;
+    subjects = subjects.filter(s=>s.id !== id);
+    save('ssp_subjects', subjects);
+    renderSubjects();
+  }
+
+  addSubjectBtn.addEventListener('click', ()=>{
+    const name = subjectName.value.trim();
+    const rawTopics = topicsInput.value.trim();
+    if(!name || !rawTopics){ alert('Please provide subject name and at least one topic.'); return; }
+    const topics = rawTopics.split(',').map(t=>t.trim()).filter(Boolean);
+    if(topics.length === 0){ alert('Enter at least one topic separated by commas.'); return; }
+    const s = {id: uid('s'), name, topics};
+    subjects.push(s);
+    save('ssp_subjects', subjects);
+    subjectName.value = ''; topicsInput.value = '';
+    renderSubjects();
+  });
+
+  clearSubjectsBtn.addEventListener('click', ()=>{
+    if(!confirm('Clear all saved subjects?')) return;
+    subjects = [];
+    save('ssp_subjects', subjects);
+    renderSubjects();
+  });
+
+  function generatePlan(){
+    const days = Number(daysInput.value) || 1;
+    if(subjects.length === 0){ alert('Add at least one subject first.'); return; }
+    // Flatten all topics into tasks preserving subject reference
+    const tasks = [];
+    subjects.forEach(s=>{
+      s.topics.forEach(topic=>{
+        tasks.push({id:uid('t'), subject:s.name, topic});
+      });
+    });
+    if(tasks.length === 0){ alert('No topics found.'); return; }
+
+    // Distribute tasks round-robin across days
+    const schedule = Array.from({length:days},(_,i)=>({day:i+1,tasks:[]}));
+    tasks.forEach((task, idx)=>{
+      const dayIndex = idx % days;
+      schedule[dayIndex].tasks.push({...task, done:false});
+    });
+
+    plan = {days, schedule, createdAt: Date.now()};
+    save('ssp_plan', plan);
+    renderPlan();
+  }
+
+  generatePlanBtn.addEventListener('click', generatePlan);
+
+  function renderPlan(){
+    daysGrid.innerHTML = '';
+    if(!plan){ summaryText.textContent = 'No plan generated yet.'; return; }
+    const totalTasks = plan.schedule.reduce((a,d)=>a+d.tasks.length,0);
+    const doneTasks = plan.schedule.reduce((a,d)=>a + d.tasks.filter(t=>t.done).length,0);
+    summaryText.textContent = `Generated for ${plan.days} day(s) • ${totalTasks} tasks`;
+    const pct = totalTasks === 0 ? 0 : Math.round(doneTasks/totalTasks*100);
+    progressBar.style.width = pct + '%';
+    progressPct.textContent = pct + '%';
+
+    plan.schedule.forEach(day=>{
+      const card = document.createElement('div'); card.className='day-card';
+      card.innerHTML = `<strong>Day ${day.day}</strong><div class="muted" style="margin-bottom:8px">${day.tasks.length} task(s)</div>`;
+      day.tasks.forEach(task=>{
+        const tdiv = document.createElement('div'); tdiv.className='task';
+        const chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!task.done;
+        chk.addEventListener('change', ()=>{ toggleTask(day.day, task.id, chk.checked); });
+        const meta = document.createElement('div'); meta.style.flex='1';
+        meta.innerHTML = `<div><strong style="font-size:14px">${escapeHtml(task.topic)}</strong></div>
+                          <div class="muted">${escapeHtml(task.subject)}</div>`;
+        tdiv.appendChild(chk); tdiv.appendChild(meta);
+        card.appendChild(tdiv);
+      });
+      daysGrid.appendChild(card);
+    });
+  }
+
+  function toggleTask(dayNumber, taskId, done){
+    if(!plan) return;
+    const day = plan.schedule.find(d=>d.day === dayNumber);
+    if(!day) return;
+    const t = day.tasks.find(x=>x.id===taskId);
+    if(!t) return;
+    t.done = !!done;
+    save('ssp_plan', plan);
+    renderPlan();
+  }
+
+  resetProgressBtn.addEventListener('click', ()=>{
+    if(!plan){ alert('No plan to reset.'); return; }
+    if(!confirm('Reset progress (mark all tasks incomplete)?')) return;
+    plan.schedule.forEach(d=>d.tasks.forEach(t=>t.done=false));
+    save('ssp_plan', plan);
+    renderPlan();
+  });
+
+  clearAllBtn.addEventListener('click', ()=>{
+    if(!confirm('Clear everything (subjects and plan)?')) return;
+    subjects = []; plan = null;
+    save('ssp_subjects', subjects); localStorage.removeItem('ssp_plan');
+    renderSubjects(); renderPlan();
+  });
+
+  // Export / Import
+  exportBtn.addEventListener('click', ()=>{
+    const payload = {subjects, plan, exportedAt: Date.now()};
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'smart-study-planner.json'; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  importBtn.addEventListener('click', ()=>importFile.click());
+  importFile.addEventListener('change', (e)=>{
+    const f = e.target.files[0]; if(!f) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      try{
+        const obj = JSON.parse(ev.target.result);
+        if(Array.isArray(obj.subjects)) subjects = obj.subjects;
+        if(obj.plan) plan = obj.plan;
+        save('ssp_subjects', subjects); if(plan) save('ssp_plan', plan);
+        renderSubjects(); renderPlan();
+        alert('Import successful.');
+      }catch(err){ alert('Invalid file.'); }
+    };
+    reader.readAsText(f);
+    importFile.value = '';
+  });
+
+  // Utilities
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  // Initial render
+  renderSubjects(); renderPlan();
+
+  // Expose generatePlan to global scope for quick testing if needed
+  window.generatePlan = generatePlan;
+</script>
+</body>
+</html>
